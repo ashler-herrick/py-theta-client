@@ -13,3 +13,6 @@ wheels/
 #ThetaData stuff
 creds.txt
 lib
+
+#logs
+logs

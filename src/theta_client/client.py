@@ -164,7 +164,7 @@ class ThetaClient:
             self.file_writer.check_for_errors()
             duration_s = (time.time() - start_time)
             logger.info(f"All jobs completed successfully in {duration_s:.2f} seconds")
-            self._stop()
+
         except Exception as e:
             logger.error(f"Error during job processing: {e}")
             self._stop()

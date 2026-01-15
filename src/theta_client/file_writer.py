@@ -78,6 +78,14 @@ class FileWriter(QueueWorker):
                 f"File writer successfully uploaded object to MinIO: {job.file_write_job.object_key}"
             )
 
+            # Clear tables to release memory (critical for preventing memory leak)
+            job.file_write_job.tables.clear()
+
+            # Explicit cleanup to help garbage collector
+            del table
+            del buffer
+            del job
+
     def file_exists(self, object_key: str) -> bool:
         """Check if an object exists in MinIO.
 

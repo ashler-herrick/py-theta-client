@@ -12,7 +12,6 @@ def test_trade_endpoint():
         end_date=20240101,
         data_type=DataType.HISTORY,
         endpoint=Endpoint.TRADE,
-        interval=Interval.S1,
     )
 
     # Verify schema mapping
@@ -46,7 +45,6 @@ def test_trade_quote_endpoint():
         end_date=20240101,
         data_type=DataType.HISTORY,
         endpoint=Endpoint.TRADE_QUOTE,
-        interval=Interval.TICK,
     )
 
     # Verify schema mapping
