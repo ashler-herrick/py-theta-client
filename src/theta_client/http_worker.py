@@ -21,7 +21,7 @@ class HTTPWorker(QueueWorker):
         Args:
             num_threads: Number of concurrent HTTP worker threads. Default is 4.
         """
-        super().__init__(num_threads=num_threads, outputs_results=True)
+        super().__init__(num_threads=num_threads)
         self.httpx_client = httpx.Client(
             timeout=120,
             limits=httpx.Limits(

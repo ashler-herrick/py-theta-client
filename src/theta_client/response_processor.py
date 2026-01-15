@@ -20,7 +20,7 @@ class ResponseProcessor(QueueWorker):
         This worker is single-threaded by default since PyArrow CSV parsing
         is already optimized.
         """
-        super().__init__(num_threads=1, outputs_results=True)
+        super().__init__(num_threads=1)
 
     def get_convert_options(self, schema: Schema) -> pv.ConvertOptions:
         """Get PyArrow convert options for this schema.

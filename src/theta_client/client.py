@@ -40,9 +40,6 @@ class ThetaClient:
         self.response_processor = ResponseProcessor()
         self._running = False
 
-        # Chain workers together for automatic job flow
-        self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
-
     #Might want to break this out honestly
     def _configure_logging(
         self, 

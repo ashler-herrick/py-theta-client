@@ -33,7 +33,7 @@ class FileWriter(QueueWorker):
             config: MinIO configuration for S3-compatible object storage
         """
         # FileWriter is a terminal worker - it doesn't output results
-        super().__init__(num_threads=1, outputs_results=False)
+        super().__init__(num_threads=1)
         self.config = config
         self.minio_client = Minio(
             endpoint=self.config.endpoint,
@@ -77,14 +77,6 @@ class FileWriter(QueueWorker):
             logger.debug(
                 f"File writer successfully uploaded object to MinIO: {job.file_write_job.object_key}"
             )
-
-            # Clear tables to release memory (critical for preventing memory leak)
-            job.file_write_job.tables.clear()
-
-            # Explicit cleanup to help garbage collector
-            del table
-            del buffer
-            del job
 
     def file_exists(self, object_key: str) -> bool:
         """Check if an object exists in MinIO.

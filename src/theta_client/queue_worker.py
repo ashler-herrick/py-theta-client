@@ -23,7 +23,7 @@ class QueueWorker(ABC):
     processing logic.
     """
 
-    def __init__(self, num_threads: int = 1, outputs_results: bool = True) -> None:
+    def __init__(self, num_threads: int = 1) -> None:
         """Initialize the queue worker.
 
         Args:
@@ -32,7 +32,6 @@ class QueueWorker(ABC):
                 Terminal workers (like FileWriter) should set this to False.
         """
         self.input_queue: Queue[Job] = Queue()
-        self.output_queue: Optional[Queue[Job]] = Queue() if outputs_results else None
         self._running: bool = False
         self.num_threads: int = num_threads
         self._threads: list[threading.Thread] = []
@@ -49,20 +48,12 @@ class QueueWorker(ABC):
         """Add a job to the input queue"""
         self.input_queue.put(job)
 
-    def get_result(self, timeout: Optional[float] = None) -> Job:
-        """Get a result from the output queue."""
-        if self.output_queue is None:
-            raise RuntimeError("This worker does not output results")
-        return self.output_queue.get(timeout=timeout)
-
     def wait_for_completion(self) -> None:
         """Wait for all jobs in the input queue to be processed."""
         self.input_queue.join()
 
     def chain_to(self, next_worker: "QueueWorker") -> "QueueWorker":
         """Chain this worker's output to another worker's input."""
-        if self.output_queue is None:
-            raise RuntimeError("Cannot chain from a worker that doesn't output results")
         self._chained_worker = next_worker
         return next_worker
 
@@ -82,10 +73,6 @@ class QueueWorker(ABC):
 
             try:
                 processed_job = self.process(job)
-
-                # Put in output queue if this worker outputs results
-                if self.output_queue is not None and processed_job is not None:
-                    self.output_queue.put(processed_job)
 
                 # Forward to chained worker if configured
                 if self._chained_worker is not None and processed_job is not None:
@@ -121,6 +108,15 @@ class QueueWorker(ABC):
             thread.start()
             self._threads.append(thread)
 
+    def clear_queue(self, q) -> None:
+        if not q:
+            return
+        while not q.empty():
+            try:
+                q.get_nowait()
+            except:
+                break
+
     def stop(self) -> None:
         """Stop the worker threads gracefully."""
         logger.info(f"Stopping {self.__class__.__name__}...")
@@ -130,3 +126,4 @@ class QueueWorker(ABC):
             thread.join(timeout=2.0)
 
         self._threads.clear()
+        self.clear_queue(self.input_queue)
