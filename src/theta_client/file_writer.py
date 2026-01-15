@@ -57,6 +57,10 @@ class FileWriter(QueueWorker):
         """
         if not job.file_write_job.completed:
             return 
+        
+        if job.file_write_job.skipped_items:
+            logger.warning(f"Incomplete items found for file {job.file_write_job.object_key}. Skipping write.")
+            return 
 
         if job.file_write_job.tables:
             table = pa.concat_tables(job.file_write_job.tables)

@@ -27,6 +27,7 @@ class FileWriteJob:
 
     object_key: str
     total_items: int
+    skipped_items: bool = False
     completed_items: int = 0
     completed: bool = False
     tables: List[pa.table] = field(default_factory=list)
@@ -43,9 +44,8 @@ class FileWriteJob:
     def mark_item_skipped(self) -> None:
         """Mark an item as skipped without adding a table."""
         with self._lock:
-            self.completed_items += 1
-            if self.completed_items == self.total_items:
-                self.completed = True
+            self.skipped_items = True
+            
 
 
 @dataclass(slots=True)
