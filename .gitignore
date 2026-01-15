@@ -14,5 +14,7 @@ wheels/
 creds.txt
 lib
 
-#logs
+#other
 logs
+*.csv
+*.txt
