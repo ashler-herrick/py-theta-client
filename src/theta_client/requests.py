@@ -96,11 +96,9 @@ class ThetaRequest:
         self._validate_params()
 
     def __repr__(self):
-        params = ", ".join(
-            f"{k}={v!r}" for k, v in vars(self).items()
-        )
+        params = ", ".join(f"{k}={v!r}" for k, v in vars(self).items())
         return f"{self.__class__.__name__}({params})"
-    
+
     def _validate_params(self) -> None:
         pass
 
@@ -131,9 +129,11 @@ class ThetaRequest:
                 params = base_params | {"date": d}
             else:
                 params = base_params | {"start_date": d, "end_date": d}
+
             def quote_keep_star(s, safe, encoding, errors):
-                return quote(s, safe='*')
-            urls.append(f"{base_url}?{urlencode(params, quote_via=quote_keep_star)}") #type: ignore
+                return quote(s, safe="*")
+
+            urls.append(f"{base_url}?{urlencode(params, quote_via=quote_keep_star)}")  # type: ignore
 
         return urls
 

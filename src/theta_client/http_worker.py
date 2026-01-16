@@ -50,9 +50,7 @@ class HTTPWorker(QueueWorker):
         # If no data just return None for the buffer
         if response.status_code == 472:
             response_text = response.text
-            if (
-                "No data found for your request" in response_text
-            ):
+            if "No data found for your request" in response_text:
                 logger.warning(f"No data response from {job.url} ({duration_ms:.1f}ms)")
                 job.csv_buffer = None
                 return job

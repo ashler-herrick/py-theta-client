@@ -75,6 +75,7 @@ def get_dates(root: str, sec: str = "stock") -> List[str]:
     params = {"use_csv": "true", "root": root}
     return _get_list(url, params)
 
+
 def get_theta_symbols() -> List[str]:
     url = "http://localhost:25503/v3/option/list/symbols"
     response = httpx.get(url)

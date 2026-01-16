@@ -34,18 +34,21 @@ class FileWriteJob:
     byte_wrapper: Optional[BytesIO] = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
+    def _increment(self) -> None:
+        self.completed_items += 1
+        if self.completed_items == self.total_items:
+            self.completed = True
+
     def add_table(self, table: pa.table) -> None:
         with self._lock:
             self.tables.append(table)
-            self.completed_items += 1
-            if self.completed_items == self.total_items:
-                self.completed = True
+            self._increment()
 
     def mark_item_skipped(self) -> None:
         """Mark an item as skipped without adding a table."""
         with self._lock:
             self.skipped_items = True
-            
+            self._increment()
 
 
 @dataclass(slots=True)

@@ -75,6 +75,7 @@ def get_dates(root: str, sec: str = "stock") -> List[str]:
     params = {"use_csv": "true", "root": root}
     return _get_list(url, params)
 
+
 def get_theta_symbols() -> List[str]:
     url = "http://localhost:25503/v3/option/list/symbols"
     response = httpx.get(url)
@@ -92,6 +93,7 @@ def get_symbol_universe() -> List[str]:
     sp400 = get_index_tickers("sp400")
 
     return list(set(sp500 + rut1k + sp600 + sp400).intersection(set(theta)))
+
 
 if __name__ == "__main__":
     univ = get_symbol_universe()

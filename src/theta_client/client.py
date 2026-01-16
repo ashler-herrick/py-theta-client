@@ -41,14 +41,14 @@ class ThetaClient:
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
 
-    #Might want to break this out honestly
+    # Might want to break this out honestly
     def _configure_logging(
-        self, 
+        self,
         log_level: str,
         log_dir: str | Path = "./logs",
         console: bool = True,
         max_bytes: int = 100 * 1024 * 1024,  # 10MB default
-        backup_count: int = 5
+        backup_count: int = 5,
     ) -> None:
         """Configure logging for all theta_client modules.
 
@@ -71,12 +71,14 @@ class ThetaClient:
         # Create log directory if it doesn't exist
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
-        
+
         log_file = log_path / "theta-client.log"
 
         # Get the theta_client root logger
         theta_logger = logging.getLogger("theta_client")
-        theta_logger.setLevel(logging.DEBUG)  # Set to DEBUG to allow all messages through
+        theta_logger.setLevel(
+            logging.DEBUG
+        )  # Set to DEBUG to allow all messages through
 
         # Clear existing handlers to avoid duplicates
         theta_logger.handlers.clear()
@@ -96,9 +98,7 @@ class ThetaClient:
 
         # Add rotating file handler - ALWAYS at WARNING level
         file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=max_bytes,
-            backupCount=backup_count
+            log_file, maxBytes=max_bytes, backupCount=backup_count
         )
         file_handler.setLevel(logging.WARNING)  # File always captures WARNING+
         file_handler.setFormatter(formatter)
@@ -133,9 +133,7 @@ class ThetaClient:
 
     def request_data(self, request: Request) -> None:
         self._start()
-        logger.info(
-            f"Processing {type(request).__name__}. Parameters: {request}"
-        )
+        logger.info(f"Processing {type(request).__name__}. Parameters: {request}")
         start_time = time.time()
         key_map = request.get_key_map()
         schema = request.get_schema()
@@ -169,7 +167,7 @@ class ThetaClient:
             self.response_processor.check_for_errors()
             self.file_writer.wait_for_completion()
             self.file_writer.check_for_errors()
-            duration_s = (time.time() - start_time)
+            duration_s = time.time() - start_time
             logger.info(f"All jobs completed successfully in {duration_s:.2f} seconds")
 
         except Exception as e:

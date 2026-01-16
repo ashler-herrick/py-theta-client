@@ -159,7 +159,9 @@ greek_first_order = [
     pa.field("implied_vol", pa.float64()),
     pa.field("iv_error", pa.float64()),  # Quote-to-IV variance
     # Underlying asset data
-    pa.field("underlying_timestamp", pa.timestamp("ms")),  # Millisecond precision timestamp
+    pa.field(
+        "underlying_timestamp", pa.timestamp("ms")
+    ),  # Millisecond precision timestamp
     pa.field("underlying_price", pa.float64()),  # Underlying midpoint at trade time
 ]
 
@@ -218,7 +220,9 @@ greek_eod = [
     pa.field("implied_vol", pa.float64()),
     pa.field("iv_error", pa.float64()),  # Quote-to-IV variance
     # Underlying asset data
-    pa.field("underlying_timestamp", pa.timestamp("ms")),  # Millisecond precision timestamp
+    pa.field(
+        "underlying_timestamp", pa.timestamp("ms")
+    ),  # Millisecond precision timestamp
     pa.field("underlying_price", pa.float64()),  # Underlying midpoint at trade time
 ]
 
