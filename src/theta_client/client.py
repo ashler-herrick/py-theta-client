@@ -2,7 +2,7 @@ import logging
 import time
 import threading
 from pathlib import Path
-from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 from theta_client.file_writer import FileWriter, MinIOConfig
 from theta_client.http_worker import HTTPWorker
@@ -45,14 +45,18 @@ class ThetaClient:
         self, 
         log_level: str,
         log_dir: str | Path = "./logs",
-        console: bool = True
+        console: bool = True,
+        max_bytes: int = 100 * 1024 * 1024,  # 10MB default
+        backup_count: int = 5
     ) -> None:
         """Configure logging for all theta_client modules.
 
         Args:
-            log_level: Desired log level as a string
+            log_level: Console log level as a string
             log_dir: Directory for log files (default: ./logs)
             console: Whether to log to console (default: True)
+            max_bytes: Maximum size per log file before rotation (default: 10MB)
+            backup_count: Number of backup files to keep (default: 5)
         """
         # Convert string to logging level, default to INFO if invalid
         level = getattr(logging, log_level.upper(), None)
@@ -67,13 +71,11 @@ class ThetaClient:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
         
-        # Create date-stamped filename
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        log_file = log_path / f"{date_str}.log"
+        log_file = log_path / "theta-client.log"
 
         # Get the theta_client root logger
         theta_logger = logging.getLogger("theta_client")
-        theta_logger.setLevel(level)
+        theta_logger.setLevel(logging.DEBUG)  # Set to DEBUG to allow all messages through
 
         # Clear existing handlers to avoid duplicates
         theta_logger.handlers.clear()
@@ -84,18 +86,25 @@ class ThetaClient:
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-        # Add console handler
+        # Add console handler with user-specified level
         if console:
             console_handler = logging.StreamHandler()
             console_handler.setLevel(level)
             console_handler.setFormatter(formatter)
             theta_logger.addHandler(console_handler)
 
-        # Add file handler
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(level)
+        # Add rotating file handler - ALWAYS at WARNING level
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count
+        )
+        file_handler.setLevel(logging.WARNING)  # File always captures WARNING+
         file_handler.setFormatter(formatter)
         theta_logger.addHandler(file_handler)
+
+        # Prevent propagation to root logger
+        theta_logger.propagate = False
 
     # Singleton to prevent too many requests being sent.
     def __new__(cls, *args, **kwargs):

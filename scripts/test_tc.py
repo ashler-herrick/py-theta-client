@@ -9,7 +9,7 @@ univ = get_symbol_universe()
 client = ThetaClient(
     num_threads=4,
     storage_config=MinIOConfig(),
-    log_level="WARNING",  # Change to "DEBUG" for verbose output, "WARNING" for quiet
+    log_level="INFO",  # Change to "DEBUG" for verbose output, "WARNING" for quiet
 )
 
 for symbol in univ:
@@ -20,7 +20,7 @@ for symbol in univ:
         data_type=DataType.HISTORY,
         endpoint=Endpoint.GREEKS_EOD,
         file_granularity=FileGranularity.MONTHLY,
-        force_refresh=False
+        force_refresh=True
     )
 
     client.request_data(req)

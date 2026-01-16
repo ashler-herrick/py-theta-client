@@ -1,5 +1,0 @@
-https://docs.thetadata.us/operations/option_history_eod.html
-https://docs.thetadata.us/operations/option_history_quote.html
-https://docs.thetadata.us/operations/option_history_trade.html
-https://docs.thetadata.us/operations/option_history_trade_quote.html
-https://docs.thetadata.us/operations/option_history_greeks_first_order.html
