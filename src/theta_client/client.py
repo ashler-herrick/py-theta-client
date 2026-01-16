@@ -39,6 +39,7 @@ class ThetaClient:
         self.http_worker = HTTPWorker(num_threads=num_threads)
         self.response_processor = ResponseProcessor()
         self._running = False
+        self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
 
     #Might want to break this out honestly
     def _configure_logging(

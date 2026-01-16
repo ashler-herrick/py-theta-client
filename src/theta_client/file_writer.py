@@ -1,7 +1,6 @@
 import logging
 from io import BytesIO
 from dataclasses import dataclass
-from typing import Optional
 
 import pyarrow as pa
 import pyarrow.parquet as pq

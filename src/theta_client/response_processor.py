@@ -47,6 +47,7 @@ class ResponseProcessor(QueueWorker):
         # Handle jobs with no data
         if job.csv_buffer is None:
             job.file_write_job.mark_item_skipped()
+            logger.debug(f"Marking item skipped for file write job {job.file_write_job.object_key}")
             return job
 
         start_time = time.time()
