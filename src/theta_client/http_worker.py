@@ -1,12 +1,15 @@
 import logging
 import time
 from io import BytesIO
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import httpx
 
 from theta_client.job import Job
 from theta_client.queue_worker import QueueWorker
+
+if TYPE_CHECKING:
+    from theta_client.metrics import MetricsCollector
 
 
 logger = logging.getLogger(__name__)
@@ -15,13 +18,17 @@ logger = logging.getLogger(__name__)
 class HTTPWorker(QueueWorker):
     """Worker that fetches data from HTTP endpoints concurrently."""
 
-    def __init__(self, num_threads: int = 4) -> None:
+    def __init__(
+        self, num_threads: int = 4, metrics: Optional["MetricsCollector"] = None
+    ) -> None:
         """Initialize the HTTP worker.
 
         Args:
             num_threads: Number of concurrent HTTP worker threads. Default is 4.
+            metrics: Optional MetricsCollector for progress tracking.
         """
         super().__init__(num_threads=num_threads)
+        self._metrics = metrics
         self.httpx_client = httpx.Client(
             timeout=120,
             limits=httpx.Limits(
@@ -53,11 +60,17 @@ class HTTPWorker(QueueWorker):
             if "No data found for your request" in response_text:
                 logger.warning(f"No data response from {job.url} ({duration_ms:.1f}ms)")
                 job.csv_buffer = None
+                if self._metrics:
+                    self._metrics.record_http_response(duration_ms)
                 return job
 
         response.raise_for_status()
         job.csv_buffer = BytesIO(response.content)
         logger.debug(f"Processing complete for URL: {job.url} in {duration_ms:.1f}ms")
+
+        if self._metrics:
+            self._metrics.record_http_response(duration_ms)
+
         return job
 
     def stop(self) -> None:

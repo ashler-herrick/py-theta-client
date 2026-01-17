@@ -1,12 +1,16 @@
 import logging
 from io import BytesIO
 from dataclasses import dataclass
+from typing import Optional, TYPE_CHECKING
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 from theta_client.job import Job
 from theta_client.queue_worker import QueueWorker
 from minio import Minio, S3Error
+
+if TYPE_CHECKING:
+    from theta_client.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +29,19 @@ class MinIOConfig:
 class FileWriter(QueueWorker):
     """Terminal worker that writes PyArrow tables to MinIO as Parquet files."""
 
-    def __init__(self, config: MinIOConfig) -> None:
+    def __init__(
+        self, config: MinIOConfig, metrics: Optional["MetricsCollector"] = None
+    ) -> None:
         """Initialize the file writer.
 
         Args:
             config: MinIO configuration for S3-compatible object storage
+            metrics: Optional MetricsCollector for progress tracking.
         """
         # FileWriter is a terminal worker - it doesn't output results
         super().__init__(num_threads=1)
         self.config = config
+        self._metrics = metrics
         self.minio_client = Minio(
             endpoint=self.config.endpoint,
             access_key=self.config.access_key,
@@ -82,6 +90,9 @@ class FileWriter(QueueWorker):
             logger.debug(
                 f"File writer successfully uploaded object to MinIO: {job.file_write_job.object_key}"
             )
+
+            if self._metrics:
+                self._metrics.record_file_written()
 
     def file_exists(self, object_key: str) -> bool:
         """Check if an object exists in MinIO.

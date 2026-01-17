@@ -8,6 +8,7 @@ dependencies = [
     "httpx[http2]>=0.28.1",
     "minio>=7.2.20",
     "pyarrow>=22.0.0",
+    "rich>=13.0.0",
 ]
 
 [dependency-groups]

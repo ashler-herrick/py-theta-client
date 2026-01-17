@@ -3,12 +3,15 @@ import time
 import threading
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from typing import Optional
 
 from theta_client.file_writer import FileWriter, MinIOConfig
 from theta_client.http_worker import HTTPWorker
 from theta_client.response_processor import ResponseProcessor
 from theta_client.requests import OptionRequest, StockRequest
 from theta_client.job import FileWriteJob, Job
+from theta_client.metrics import MetricsCollector
+from theta_client.progress_display import ProgressDisplay
 
 Request = OptionRequest | StockRequest
 
@@ -20,7 +23,11 @@ class ThetaClient:
     _lock = threading.Lock()
 
     def __init__(
-        self, num_threads: int, storage_config: MinIOConfig, log_level: str = "INFO"
+        self,
+        num_threads: int,
+        storage_config: MinIOConfig,
+        log_level: str = "INFO",
+        show_progress: bool = True,
     ):
         """Initialize the ThetaClient.
 
@@ -30,14 +37,24 @@ class ThetaClient:
             log_level: Log level for theta_client modules. Valid values:
                 "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
                 Default is "INFO".
+            show_progress: Whether to show live progress display. Default is True.
         """
         # Configure logging for theta_client modules
-        self._configure_logging(log_level)
+        self._configure_logging(log_level, console=not show_progress)
 
         self.num_threads = num_threads
-        self.file_writer = FileWriter(storage_config)
-        self.http_worker = HTTPWorker(num_threads=num_threads)
-        self.response_processor = ResponseProcessor()
+        self.show_progress = show_progress
+
+        # Initialize metrics collector if progress display is enabled
+        self._metrics: Optional[MetricsCollector] = MetricsCollector() if show_progress else None
+        self._progress_display: Optional[ProgressDisplay] = (
+            ProgressDisplay(self._metrics) if self._metrics else None
+        )
+
+        # Initialize workers with optional metrics
+        self.file_writer = FileWriter(storage_config, metrics=self._metrics)
+        self.http_worker = HTTPWorker(num_threads=num_threads, metrics=self._metrics)
+        self.response_processor = ResponseProcessor(metrics=self._metrics)
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
 
@@ -138,11 +155,39 @@ class ThetaClient:
         key_map = request.get_key_map()
         schema = request.get_schema()
 
+        # Calculate total HTTP requests and files for metrics
+        total_http_requests = 0
+        total_files = 0
+        files_to_process: list[tuple[str, list[str]]] = []
+
         for object_key, url_list in key_map.items():
             if not request.force_refresh and self.file_writer.file_exists(object_key):
                 logger.debug(f"Skipping existing file: {object_key}")
                 continue
             else:
+                files_to_process.append((object_key, url_list))
+                total_http_requests += len(url_list)
+                total_files += 1
+
+        # Initialize metrics tracking
+        if self._metrics:
+            self._metrics.start_request(
+                request_type=type(request).__name__,
+                symbol=request.symbol,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                endpoint=request.endpoint.value,
+                total_http_requests=total_http_requests,
+                total_files=total_files,
+            )
+
+        # Start progress display
+        if self._progress_display:
+            self._progress_display.start()
+
+        try:
+            # Create jobs for files that need processing
+            for object_key, url_list in files_to_process:
                 file_write_job = FileWriteJob(
                     object_key=object_key, total_items=len(url_list)
                 )
@@ -158,9 +203,8 @@ class ThetaClient:
                     )
                     self.http_worker.add_job(job)
 
-        # Wait for all jobs to flow through the pipeline and complete
-        logger.info("Waiting for all jobs to complete...")
-        try:
+            # Wait for all jobs to flow through the pipeline and complete
+            logger.info("Waiting for all jobs to complete...")
             self.http_worker.wait_for_completion()
             self.http_worker.check_for_errors()
             self.response_processor.wait_for_completion()
@@ -174,3 +218,10 @@ class ThetaClient:
             logger.error(f"Error during job processing: {e}")
             self._stop()
             raise
+
+        finally:
+            # Stop progress display and show summary
+            if self._progress_display:
+                self._progress_display.stop()
+            if self._metrics:
+                self._metrics.end_request()
