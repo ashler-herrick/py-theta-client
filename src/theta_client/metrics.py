@@ -23,6 +23,8 @@ class RequestMetrics:
     total_files: int = 0
     files_written: int = 0
     rows_processed: int = 0
+    missing_data_count: int = 0
+    files_skipped: int = 0
 
     # Timing
     start_time: float = 0.0
@@ -132,6 +134,16 @@ class MetricsCollector:
         with self._metrics_lock:
             self._metrics.files_written += 1
 
+    def record_missing_data(self) -> None:
+        """Record an HTTP response with no data found (472 status)."""
+        with self._metrics_lock:
+            self._metrics.missing_data_count += 1
+
+    def record_file_skipped(self) -> None:
+        """Record a file skipped due to incomplete items."""
+        with self._metrics_lock:
+            self._metrics.files_skipped += 1
+
     def get_snapshot(self) -> RequestMetrics:
         """Get a thread-safe snapshot of current metrics.
 
@@ -150,6 +162,8 @@ class MetricsCollector:
                 total_files=self._metrics.total_files,
                 files_written=self._metrics.files_written,
                 rows_processed=self._metrics.rows_processed,
+                missing_data_count=self._metrics.missing_data_count,
+                files_skipped=self._metrics.files_skipped,
                 start_time=self._metrics.start_time,
                 http_response_times=list(self._metrics.http_response_times),
             )

@@ -98,6 +98,18 @@ class ProgressDisplay:
             if snapshot.rows_per_second > 0
             else "-",
         )
+        info_table.add_row("", "")  # Spacer
+
+        #Missing data
+        info_table.add_row(
+            "Missing Data Count",
+            self._format_number(snapshot.missing_data_count)
+        )
+
+        info_table.add_row(
+            "Files Skipped",
+            self._format_number(snapshot.files_skipped)
+        )
 
         # Create progress bar
         progress = Progress(
@@ -182,6 +194,10 @@ class ProgressDisplay:
         summary_table.add_row(
             "Rows/Second", self._format_number(int(snapshot.rows_per_second))
         )
+        if snapshot.missing_data_count > 0:
+            summary_table.add_row("Missing Data", str(snapshot.missing_data_count))
+        if snapshot.files_skipped > 0:
+            summary_table.add_row("Files Skipped", str(snapshot.files_skipped))
 
         self._console.print()
         self._console.print(summary_table)

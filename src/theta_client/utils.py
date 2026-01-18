@@ -85,11 +85,15 @@ def get_theta_symbols() -> List[str]:
     return [row["symbol"] for row in reader]
 
 
-def get_symbol_universe() -> List[str]:
+def get_symbol_universe(index: str = "all") -> List[str]:
+    if index != "all":
+        idx_tx = get_index_tickers(index)
+    else:
+        sp500 = get_index_tickers("sp500")
+        rut1k = get_index_tickers("russell1000")
+        sp600 = get_index_tickers("sp600")
+        sp400 = get_index_tickers("sp400")
+        idx_tx = sp500 + rut1k + sp600 + sp400
     theta = get_theta_symbols()
-    sp500 = get_index_tickers("sp500")
-    rut1k = get_index_tickers("russell1000")
-    sp600 = get_index_tickers("sp600")
-    sp400 = get_index_tickers("sp400")
 
-    return list(set(sp500 + rut1k + sp600 + sp400).intersection(set(theta)))
+    return list(set(idx_tx).intersection(set(theta)))

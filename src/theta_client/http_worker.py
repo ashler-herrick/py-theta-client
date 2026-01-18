@@ -61,7 +61,7 @@ class HTTPWorker(QueueWorker):
                 logger.warning(f"No data response from {job.url} ({duration_ms:.1f}ms)")
                 job.csv_buffer = None
                 if self._metrics:
-                    self._metrics.record_http_response(duration_ms)
+                    self._metrics.record_missing_data()
                 return job
 
         response.raise_for_status()

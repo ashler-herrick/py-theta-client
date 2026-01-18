@@ -69,6 +69,8 @@ class FileWriter(QueueWorker):
             logger.warning(
                 f"Incomplete items found for file {job.file_write_job.object_key}. Skipping write."
             )
+            if self._metrics:
+                self._metrics.record_file_skipped()
             return
 
         if job.file_write_job.tables:
