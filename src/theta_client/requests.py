@@ -145,7 +145,14 @@ class ThetaRequest:
         response.raise_for_status()
 
         reader = csv.DictReader(StringIO(response.text))
-        return [row["date"].replace("-", "") for row in reader]
+        dates = []
+        for row in reader:
+            date_str = row["date"].replace("-", "")
+            # Parse date and check if it's a weekday (Monday=0 through Friday=4)
+            dt = datetime.strptime(date_str, "%Y%m%d")
+            if dt.weekday() < 5:  # 0-4 are weekdays, 5-6 are weekend
+                dates.append(date_str)
+        return dates
 
     def _generate_date_range(self) -> list[str]:
         # Convert integers to datetime objects
