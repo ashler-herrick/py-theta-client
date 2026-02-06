@@ -230,7 +230,7 @@ class StockRequest(ThetaRequest):
         file_granularity: FileGranularity = FileGranularity.MONTHLY,
     ) -> None:
         # Set minio_folder based on data_type
-        self.minio_folder = f"theta/stock/{data_type.value}"
+        self.minio_folder = f"thetadata/stock/{data_type.value}"
 
         super().__init__(
             symbol=symbol,
