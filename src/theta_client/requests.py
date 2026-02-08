@@ -202,6 +202,8 @@ class ThetaRequest:
     def get_key_map(self) -> Dict[str, List[str]]:
         if self.endpoint in [Endpoint.EOD, Endpoint.GREEKS_EOD]:
             int_str = "1d"
+        elif self.data_type == DataType.AT_TIME:
+            int_str = self.time_of_day
         elif self.interval is None:
             raise ValueError(f"interval is required for endpoint {self.endpoint.value}")
         else:
