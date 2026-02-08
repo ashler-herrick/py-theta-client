@@ -100,16 +100,12 @@ class ProgressDisplay:
         )
         info_table.add_row("", "")  # Spacer
 
-        #Missing data
+        # Missing data
         info_table.add_row(
-            "Missing Data Count",
-            self._format_number(snapshot.missing_data_count)
+            "Missing Data Count", self._format_number(snapshot.missing_data_count)
         )
 
-        info_table.add_row(
-            "Files Skipped",
-            self._format_number(snapshot.files_skipped)
-        )
+        info_table.add_row("Files Skipped", self._format_number(snapshot.files_skipped))
 
         # Create progress bar
         progress = Progress(
@@ -118,7 +114,11 @@ class ProgressDisplay:
             TaskProgressColumn(),
             expand=False,
         )
-        task = progress.add_task("Progress", total=snapshot.total_http_requests, completed=snapshot.http_completed)
+        task = progress.add_task(
+            "Progress",
+            total=snapshot.total_http_requests,
+            completed=snapshot.http_completed,
+        )
 
         # Combine into a table
         layout = Table.grid(expand=True)
@@ -126,7 +126,11 @@ class ProgressDisplay:
         layout.add_row("")
         layout.add_row(progress)
 
-        title = f"ThetaClient Progress - {snapshot.symbol}" if snapshot.symbol else "ThetaClient Progress"
+        title = (
+            f"ThetaClient Progress - {snapshot.symbol}"
+            if snapshot.symbol
+            else "ThetaClient Progress"
+        )
         return Panel(
             layout,
             title=title,

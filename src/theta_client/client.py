@@ -46,7 +46,9 @@ class ThetaClient:
         self.show_progress = show_progress
 
         # Initialize metrics collector if progress display is enabled
-        self._metrics: Optional[MetricsCollector] = MetricsCollector() if show_progress else None
+        self._metrics: Optional[MetricsCollector] = (
+            MetricsCollector() if show_progress else None
+        )
         self._progress_display: Optional[ProgressDisplay] = (
             ProgressDisplay(self._metrics) if self._metrics else None
         )

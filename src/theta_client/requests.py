@@ -118,10 +118,7 @@ class ThetaRequest:
             "symbol": self.symbol,
         }
 
-        # Add interval if not EOD endpoint
-        if self.endpoint != Endpoint.EOD and self.endpoint != Endpoint.GREEKS_EOD:
-            if self.interval is None:
-                raise ValueError(f"interval is required for endpoint {self.endpoint.value}")
+        if self.interval:
             base_params["interval"] = self.interval.value
 
         # Add wildcard parameters for options
@@ -132,21 +129,12 @@ class ThetaRequest:
         def quote_keep_star(s, safe, encoding, errors):
             return quote(s, safe="*")
 
-        # AT_TIME: one URL per date group with start_date/end_date range
-        if self.data_type == DataType.AT_TIME:
-            sorted_days = sorted(days)
-            params = base_params | {
-                "start_date": sorted_days[0],
-                "end_date": sorted_days[-1],
-                "time_of_day": self.time_of_day,
-            }
-            urls.append(f"{base_url}?{urlencode(params, quote_via=quote_keep_star)}")  # type: ignore
-            return urls
-
         for d in days:
             # Create a string like YYYYMMDD
-            if self.endpoint != Endpoint.EOD and self.endpoint != Endpoint.GREEKS_EOD:
+            if self.endpoint not in [Endpoint.EOD, Endpoint.GREEKS_EOD] and self.data_type != DataType.AT_TIME:
                 params = base_params | {"date": d}
+            elif self.data_type == DataType.AT_TIME:
+                params = base_params | {"time_of_day": self.time_of_day, "start_date": d, "end_date": d}
             else:
                 params = base_params | {"start_date": d, "end_date": d}
 
@@ -208,6 +196,7 @@ class ThetaRequest:
             raise ValueError(f"interval is required for endpoint {self.endpoint.value}")
         else:
             int_str = self.interval.value
+
         base_key = f"{self.minio_folder}/{self.endpoint.value}/{self.file_granularity.value}/{int_str}/{self.symbol}"
         given_dates = self._generate_date_range()
         valid_dates = self._get_valid_dates()
