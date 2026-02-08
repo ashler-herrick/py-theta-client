@@ -44,6 +44,22 @@ stock_eod = [
 ]
 
 
+# Stock Trade Schema
+# Endpoint: /v3/stock/at_time/trade
+stock_trade = [
+    pa.field("timestamp", pa.timestamp("ms")),
+    pa.field("sequence", pa.int64()),
+    pa.field("ext_condition1", pa.int16()),
+    pa.field("ext_condition2", pa.int16()),
+    pa.field("ext_condition3", pa.int16()),
+    pa.field("ext_condition4", pa.int16()),
+    pa.field("condition", pa.int16()),
+    pa.field("size", pa.int32()),
+    pa.field("exchange", pa.int16()),
+    pa.field("price", pa.float64()),
+]
+
+
 # Option Quote Schema
 # Endpoint: /v3/option/history/quote
 option_quote = [
@@ -231,6 +247,7 @@ greek_eod = [
 SCHEMAS = {
     "stock_quote": pa.schema(stock_quote),
     "stock_eod": pa.schema(stock_eod),
+    "stock_trade": pa.schema(stock_trade),
     "option_quote": pa.schema(option_quote),
     "option_eod": pa.schema(option_eod),
     "option_trade": pa.schema(option_trade),

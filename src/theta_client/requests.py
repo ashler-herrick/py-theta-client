@@ -4,7 +4,7 @@ from urllib.parse import urlencode, quote
 from io import StringIO
 from datetime import datetime, timedelta
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import csv
 
 
@@ -40,6 +40,7 @@ class AssetClass(Enum):
 class DataType(Enum):
     HISTORY = "history"
     SNAPSHOT = "snapshot"
+    AT_TIME = "at_time"
 
 
 class Endpoint(Enum):
@@ -68,9 +69,10 @@ class ThetaRequest:
         asset_class: AssetClass,
         data_type: DataType,
         endpoint: Endpoint,
-        interval: Interval = Interval.H1,
+        interval: Optional[Interval] = None,
         force_refresh: bool = False,
         file_granularity: FileGranularity = FileGranularity.MONTHLY,
+        time_of_day: Optional[str] = None,
     ) -> None:
         """
         Args:
@@ -78,11 +80,12 @@ class ThetaRequest:
             start_date(int): Start data in integer format YYYYMMDD
             end_date(int): End date in integer format YYYYMMDD
             asset_class(AssetClass): Asset class (STOCK or OPTION).
-            data_type(DataType): Data type (HISTORY or SNAPSHOT).
-            endpoint(Endpoint): API endpoint (EOD, QUOTE, or GREEKS_EOD).
-            interval(int): Response interval in ms. Default is 3,600,000 corresponding to 1 hour.
+            data_type(DataType): Data type (HISTORY, SNAPSHOT, or AT_TIME).
+            endpoint(Endpoint): API endpoint (EOD, QUOTE, TRADE, or GREEKS_EOD).
+            interval(Optional[Interval]): Response interval. Required for QUOTE, TRADE, TRADE_QUOTE, and GREEKS_FIRST_ORDER endpoints. Not used for EOD and GREEKS_EOD endpoints.
             file_format(Formats): Format to use when writing to the lake. Default is 'parquet'
             file_granularity(FileGranularity): Granularity to concatenate response to.
+            time_of_day(str): Time of day in HH:mm:ss.SSS format. Required when data_type is AT_TIME.
         """
         self.symbol = symbol
         self.start_date = start_date
@@ -93,6 +96,7 @@ class ThetaRequest:
         self.interval = interval
         self.force_refresh = force_refresh
         self.file_granularity = file_granularity
+        self.time_of_day = time_of_day
         self._validate_params()
 
     def __repr__(self):
@@ -116,6 +120,8 @@ class ThetaRequest:
 
         # Add interval if not EOD endpoint
         if self.endpoint != Endpoint.EOD and self.endpoint != Endpoint.GREEKS_EOD:
+            if self.interval is None:
+                raise ValueError(f"interval is required for endpoint {self.endpoint.value}")
             base_params["interval"] = self.interval.value
 
         # Add wildcard parameters for options
@@ -123,15 +129,26 @@ class ThetaRequest:
             base_params["expiration"] = "*"
             base_params["strike"] = "*"
 
+        def quote_keep_star(s, safe, encoding, errors):
+            return quote(s, safe="*")
+
+        # AT_TIME: one URL per date group with start_date/end_date range
+        if self.data_type == DataType.AT_TIME:
+            sorted_days = sorted(days)
+            params = base_params | {
+                "start_date": sorted_days[0],
+                "end_date": sorted_days[-1],
+                "time_of_day": self.time_of_day,
+            }
+            urls.append(f"{base_url}?{urlencode(params, quote_via=quote_keep_star)}")  # type: ignore
+            return urls
+
         for d in days:
             # Create a string like YYYYMMDD
             if self.endpoint != Endpoint.EOD and self.endpoint != Endpoint.GREEKS_EOD:
                 params = base_params | {"date": d}
             else:
                 params = base_params | {"start_date": d, "end_date": d}
-
-            def quote_keep_star(s, safe, encoding, errors):
-                return quote(s, safe="*")
 
             urls.append(f"{base_url}?{urlencode(params, quote_via=quote_keep_star)}")  # type: ignore
 
@@ -183,11 +200,12 @@ class ThetaRequest:
         return dict(yearmo_dict)
 
     def get_key_map(self) -> Dict[str, List[str]]:
-        int_str = (
-            "1d"
-            if self.endpoint in [Endpoint.EOD, Endpoint.GREEKS_EOD]
-            else self.interval
-        )
+        if self.endpoint in [Endpoint.EOD, Endpoint.GREEKS_EOD]:
+            int_str = "1d"
+        elif self.interval is None:
+            raise ValueError(f"interval is required for endpoint {self.endpoint.value}")
+        else:
+            int_str = self.interval.value
         base_key = f"{self.minio_folder}/{self.endpoint.value}/{self.file_granularity.value}/{int_str}/{self.symbol}"
         given_dates = self._generate_date_range()
         valid_dates = self._get_valid_dates()
@@ -225,9 +243,10 @@ class StockRequest(ThetaRequest):
         end_date: int,
         data_type: DataType,
         endpoint: Endpoint,
-        interval: Interval = Interval.H1,
+        interval: Optional[Interval] = None,
         force_refresh: bool = False,
         file_granularity: FileGranularity = FileGranularity.MONTHLY,
+        time_of_day: Optional[str] = None,
     ) -> None:
         # Set minio_folder based on data_type
         self.minio_folder = f"thetadata/stock/{data_type.value}"
@@ -242,15 +261,25 @@ class StockRequest(ThetaRequest):
             interval=interval,
             force_refresh=force_refresh,
             file_granularity=file_granularity,
+            time_of_day=time_of_day,
         )
 
     def get_schema(self) -> Schema:
         if self.endpoint == Endpoint.EOD:
             return Schema.STOCK_EOD
+        if self.data_type == DataType.AT_TIME and self.endpoint == Endpoint.TRADE:
+            return Schema.STOCK_TRADE
         return Schema.STOCK_QUOTE
 
     def _validate_params(self) -> None:
-        if self.endpoint not in [Endpoint.EOD, Endpoint.QUOTE]:
+        if self.data_type == DataType.AT_TIME:
+            if self.endpoint not in [Endpoint.TRADE, Endpoint.QUOTE]:
+                raise ValueError(
+                    f"Invalid endpoint for stock at_time: {self.endpoint}. Valid: TRADE, QUOTE"
+                )
+            if not self.time_of_day:
+                raise ValueError("time_of_day is required when data_type is AT_TIME")
+        elif self.endpoint not in [Endpoint.EOD, Endpoint.QUOTE]:
             raise ValueError(
                 f"Invalid endpoint for stock: {self.endpoint}. Valid: EOD, QUOTE"
             )
@@ -267,9 +296,10 @@ class OptionRequest(ThetaRequest):
         end_date: int,
         data_type: DataType,
         endpoint: Endpoint,
-        interval: Interval = Interval.H1,
+        interval: Optional[Interval] = None,
         force_refresh: bool = False,
         file_granularity: FileGranularity = FileGranularity.MONTHLY,
+        time_of_day: Optional[str] = None,
     ) -> None:
         self.minio_folder = f"thetadata/option/{data_type.value}"
 
@@ -283,6 +313,7 @@ class OptionRequest(ThetaRequest):
             interval=interval,
             force_refresh=force_refresh,
             file_granularity=file_granularity,
+            time_of_day=time_of_day,
         )
 
     def get_schema(self) -> Schema:
@@ -299,16 +330,24 @@ class OptionRequest(ThetaRequest):
         return Schema.OPTION_QUOTE
 
     def _validate_params(self) -> None:
-        valid_endpoints = [
-            Endpoint.EOD,
-            Endpoint.QUOTE,
-            Endpoint.TRADE,
-            Endpoint.TRADE_QUOTE,
-            Endpoint.GREEKS_EOD,
-            Endpoint.GREEKS_FIRST_ORDER,
-        ]
-        if self.endpoint not in valid_endpoints:
-            raise ValueError(
-                f"Invalid endpoint for option: {self.endpoint}. "
-                f"Valid: {', '.join(e.value for e in valid_endpoints)}"
-            )
+        if self.data_type == DataType.AT_TIME:
+            if self.endpoint not in [Endpoint.TRADE, Endpoint.QUOTE]:
+                raise ValueError(
+                    f"Invalid endpoint for option at_time: {self.endpoint}. Valid: TRADE, QUOTE"
+                )
+            if not self.time_of_day:
+                raise ValueError("time_of_day is required when data_type is AT_TIME")
+        else:
+            valid_endpoints = [
+                Endpoint.EOD,
+                Endpoint.QUOTE,
+                Endpoint.TRADE,
+                Endpoint.TRADE_QUOTE,
+                Endpoint.GREEKS_EOD,
+                Endpoint.GREEKS_FIRST_ORDER,
+            ]
+            if self.endpoint not in valid_endpoints:
+                raise ValueError(
+                    f"Invalid endpoint for option: {self.endpoint}. "
+                    f"Valid: {', '.join(e.value for e in valid_endpoints)}"
+                )

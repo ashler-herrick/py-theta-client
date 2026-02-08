@@ -16,6 +16,7 @@ class Schema(Enum):
     GREEK_EOD = "greek_eod"
     STOCK_EOD = "stock_eod"
     STOCK_QUOTE = "stock_quote"
+    STOCK_TRADE = "stock_trade"
 
 
 @dataclass(slots=True)
