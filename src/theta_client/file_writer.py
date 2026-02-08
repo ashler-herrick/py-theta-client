@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
 
 import pyarrow as pa
@@ -24,6 +24,7 @@ class MinIOConfig:
     secret_key: str = "minioadmin123"
     raw_bucket: str = "theta-client-data"
     secure: bool = False
+    check_buckets: list[str] = field(default_factory=list)
 
 
 class FileWriter(QueueWorker):
@@ -105,8 +106,11 @@ class FileWriter(QueueWorker):
         Returns:
             True if the object exists, False otherwise
         """
-        try:
-            self.minio_client.stat_object(self.config.raw_bucket, object_key)
-            return True
-        except S3Error:
-            return False
+        buckets = [self.config.raw_bucket] + self.config.check_buckets
+        for bucket in buckets:
+            try:
+                self.minio_client.stat_object(bucket, object_key)
+                return True
+            except S3Error:
+                continue
+        return False

@@ -25,20 +25,20 @@ def main():
 
     client = ThetaClient(
         num_threads=args.threads,
-        storage_config=MinIOConfig(),
+        storage_config=MinIOConfig(check_buckets=["enriched-td"]),
         show_progress=False,
-        log_level="INFO",
+        log_level="DEBUG",
     )
 
     req = OptionRequest(
         symbol="AAPL",
         start_date=20240901,
         end_date=20240930,
-        data_type=DataType.AT_TIME,
+        data_type=DataType.HISTORY,
         endpoint=Endpoint.QUOTE,
         file_granularity=FileGranularity.MONTHLY,
         force_refresh=False,
-        time_of_day="15:45:00.000"
+        interval=Interval.H1,
     )
     client.request_data(req)
 
