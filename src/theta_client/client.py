@@ -28,6 +28,7 @@ class ThetaClient:
         storage_config: MinIOConfig,
         log_level: str = "INFO",
         show_progress: bool = True,
+        http_timeout: int = 120,
     ):
         """Initialize the ThetaClient.
 
@@ -55,7 +56,7 @@ class ThetaClient:
 
         # Initialize workers with optional metrics
         self.file_writer = FileWriter(storage_config, metrics=self._metrics)
-        self.http_worker = HTTPWorker(num_threads=num_threads, metrics=self._metrics)
+        self.http_worker = HTTPWorker(num_threads=num_threads, metrics=self._metrics, timeout=http_timeout)
         self.response_processor = ResponseProcessor(metrics=self._metrics)
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)

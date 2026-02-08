@@ -19,7 +19,7 @@ class HTTPWorker(QueueWorker):
     """Worker that fetches data from HTTP endpoints concurrently."""
 
     def __init__(
-        self, num_threads: int = 4, metrics: Optional["MetricsCollector"] = None
+        self, num_threads: int = 4, metrics: Optional["MetricsCollector"] = None, timeout: int = 120
     ) -> None:
         """Initialize the HTTP worker.
 
@@ -30,7 +30,7 @@ class HTTPWorker(QueueWorker):
         super().__init__(num_threads=num_threads)
         self._metrics = metrics
         self.httpx_client = httpx.Client(
-            timeout=120,
+            timeout=timeout,
             limits=httpx.Limits(
                 max_connections=self.num_threads,
                 max_keepalive_connections=self.num_threads,
