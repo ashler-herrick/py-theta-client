@@ -27,13 +27,13 @@ def main():
         num_threads=args.threads,
         storage_config=MinIOConfig(),
         show_progress=False,
-        log_level="DEBUG",
+        log_level="INFO",
     )
 
     req = OptionRequest(
         symbol="AAPL",
-        start_date=20251231,
-        end_date=20251231,
+        start_date=20240901,
+        end_date=20240930,
         data_type=DataType.AT_TIME,
         endpoint=Endpoint.QUOTE,
         file_granularity=FileGranularity.MONTHLY,

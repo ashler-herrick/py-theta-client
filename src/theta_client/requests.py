@@ -188,7 +188,7 @@ class ThetaRequest:
         return dict(yearmo_dict)
 
     def get_key_map(self) -> Dict[str, List[str]]:
-        if self.endpoint in [Endpoint.EOD, Endpoint.GREEKS_EOD]:
+        if self.endpoint in [Endpoint.EOD, Endpoint.GREEKS_EOD, Endpoint.TRADE, Endpoint.TRADE_QUOTE] and self.data_type != DataType.AT_TIME:
             int_str = "1d"
         elif self.data_type == DataType.AT_TIME:
             int_str = self.time_of_day
