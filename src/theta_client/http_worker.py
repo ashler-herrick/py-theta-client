@@ -19,7 +19,7 @@ class HTTPWorker(QueueWorker):
     """Worker that fetches data from HTTP endpoints concurrently."""
 
     def __init__(
-        self, num_threads: int = 4, metrics: Optional["MetricsCollector"] = None, timeout: int = 120
+        self, num_threads: int = 4, metrics: Optional["MetricsCollector"] = None
     ) -> None:
         """Initialize the HTTP worker.
 
@@ -30,9 +30,9 @@ class HTTPWorker(QueueWorker):
         super().__init__(num_threads=num_threads)
         self._metrics = metrics
         self.httpx_client = httpx.Client(
-            timeout=timeout,
+            timeout=None,  # No timeout - let slow requests complete naturally
             limits=httpx.Limits(
-                max_connections=self.num_threads,
+                max_connections=self.num_threads,  # Must match server connection limit
                 max_keepalive_connections=self.num_threads,
             ),
             transport=httpx.HTTPTransport(retries=0),
@@ -46,32 +46,47 @@ class HTTPWorker(QueueWorker):
             job: The job containing the URL to fetch
 
         Returns:
-            The job with csv_buffer populated (or None if no data)
+            The job with csv_buffer populated (or None if no data/timeout)
         """
         start_time = time.time()
         logger.debug(f"Processing job for URL: {job.url}")
 
-        response = self.httpx_client.get(job.url)
-        duration_ms = (time.time() - start_time) * 1000
+        try:
+            logger.debug(f"Acquiring connection for {job.url}")
+            response = self.httpx_client.get(job.url)
+            logger.debug(f"Connection acquired and request completed for {job.url}")
+            duration_ms = (time.time() - start_time) * 1000
 
-        # If no data just return None for the buffer
-        if response.status_code == 472:
-            response_text = response.text
-            if "No data found for your request" in response_text:
-                logger.warning(f"No data response from {job.url} ({duration_ms:.1f}ms)")
-                job.csv_buffer = None
-                if self._metrics:
-                    self._metrics.record_missing_data()
-                return job
+            # If no data just return None for the buffer
+            if response.status_code == 472:
+                response_text = response.text
+                if "No data found for your request" in response_text:
+                    logger.warning(f"No data response from {job.url} ({duration_ms:.1f}ms)")
+                    job.csv_buffer = None
+                    if self._metrics:
+                        self._metrics.record_missing_data(duration_ms)
+                    return job
 
-        response.raise_for_status()
-        job.csv_buffer = BytesIO(response.content)
-        logger.debug(f"Processing complete for URL: {job.url} in {duration_ms:.1f}ms")
+            response.raise_for_status()
+            job.csv_buffer = BytesIO(response.content)
+            logger.debug(f"Processing complete for URL: {job.url} in {duration_ms:.1f}ms")
 
-        if self._metrics:
-            self._metrics.record_http_response(duration_ms)
+            if self._metrics:
+                self._metrics.record_http_response(duration_ms)
 
-        return job
+            return job
+
+        except httpx.TimeoutException:
+            # Request timed out - httpx automatically cancels the request
+            duration_ms = (time.time() - start_time) * 1000
+            logger.warning(
+                f"Request timeout for {job.url} after {duration_ms:.1f}ms "
+                f"(limit: {self.httpx_client.timeout}s)"
+            )
+            job.csv_buffer = None
+            if self._metrics:
+                self._metrics.record_timeout()
+            return job
 
     def stop(self) -> None:
         """Stop the HTTP worker and close the HTTP client."""

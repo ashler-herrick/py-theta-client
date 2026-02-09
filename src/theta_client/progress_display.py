@@ -87,12 +87,6 @@ class ProgressDisplay:
             self._format_duration(snapshot.elapsed_time),
         )
         info_table.add_row(
-            "Avg Response Time",
-            f"{snapshot.avg_response_time_ms:.1f}ms"
-            if snapshot.avg_response_time_ms > 0
-            else "-",
-        )
-        info_table.add_row(
             "Rows/Second",
             self._format_number(int(snapshot.rows_per_second))
             if snapshot.rows_per_second > 0
@@ -100,11 +94,25 @@ class ProgressDisplay:
         )
         info_table.add_row("", "")  # Spacer
 
-        # Missing data
-        info_table.add_row(
-            "Missing Data Count", self._format_number(snapshot.missing_data_count)
-        )
+        # Response time metrics
+        if snapshot.http_response_times:
+            info_table.add_row(
+                "Response Times",
+                f"p50: {snapshot.p50_response_time_ms:.0f}ms  "
+                f"p95: {snapshot.p95_response_time_ms:.0f}ms  "
+                f"p99: {snapshot.p99_response_time_ms:.0f}ms",
+            )
+        else:
+            info_table.add_row("Response Times", "-")
+        info_table.add_row("", "")  # Spacer
 
+        # Issues and skipped items
+        info_table.add_row(
+            "Timeouts", self._format_number(snapshot.timeout_count)
+        )
+        info_table.add_row(
+            "Missing Data", self._format_number(snapshot.missing_data_count)
+        )
         info_table.add_row("Files Skipped", self._format_number(snapshot.files_skipped))
 
         # Create progress bar
@@ -193,11 +201,17 @@ class ProgressDisplay:
             "Rows Processed", self._format_number(snapshot.rows_processed)
         )
         summary_table.add_row(
-            "Avg Response Time", f"{snapshot.avg_response_time_ms:.1f}ms"
-        )
-        summary_table.add_row(
             "Rows/Second", self._format_number(int(snapshot.rows_per_second))
         )
+        if snapshot.http_response_times:
+            summary_table.add_row(
+                "Response Times",
+                f"p50: {snapshot.p50_response_time_ms:.0f}ms  "
+                f"p95: {snapshot.p95_response_time_ms:.0f}ms  "
+                f"p99: {snapshot.p99_response_time_ms:.0f}ms",
+            )
+        if snapshot.timeout_count > 0:
+            summary_table.add_row("Timeouts", str(snapshot.timeout_count))
         if snapshot.missing_data_count > 0:
             summary_table.add_row("Missing Data", str(snapshot.missing_data_count))
         if snapshot.files_skipped > 0:

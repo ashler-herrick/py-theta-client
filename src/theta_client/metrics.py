@@ -24,6 +24,7 @@ class RequestMetrics:
     files_written: int = 0
     rows_processed: int = 0
     missing_data_count: int = 0
+    timeout_count: int = 0
     files_skipped: int = 0
 
     # Timing
@@ -43,6 +44,39 @@ class RequestMetrics:
         if not self.http_response_times:
             return 0.0
         return sum(self.http_response_times) / len(self.http_response_times)
+
+    @property
+    def p50_response_time_ms(self) -> float:
+        """Median (p50) HTTP response time in milliseconds."""
+        return self._percentile(50)
+
+    @property
+    def p95_response_time_ms(self) -> float:
+        """95th percentile HTTP response time in milliseconds."""
+        return self._percentile(95)
+
+    @property
+    def p99_response_time_ms(self) -> float:
+        """99th percentile HTTP response time in milliseconds."""
+        return self._percentile(99)
+
+    def _percentile(self, percentile: int) -> float:
+        """Calculate percentile of response times.
+
+        Args:
+            percentile: Percentile to calculate (0-100)
+
+        Returns:
+            Percentile value in milliseconds, or 0.0 if no data
+        """
+        if not self.http_response_times:
+            return 0.0
+        sorted_times = sorted(self.http_response_times)
+        index = int(len(sorted_times) * (percentile / 100.0))
+        # Handle edge case where index == len(sorted_times)
+        if index >= len(sorted_times):
+            index = len(sorted_times) - 1
+        return sorted_times[index]
 
     @property
     def http_progress_pct(self) -> float:
@@ -134,10 +168,28 @@ class MetricsCollector:
         with self._metrics_lock:
             self._metrics.files_written += 1
 
-    def record_missing_data(self) -> None:
-        """Record an HTTP response with no data found (472 status)."""
+    def record_missing_data(self, duration_ms: float = 0.0) -> None:
+        """Record an HTTP response with no data found (472 status).
+
+        Args:
+            duration_ms: Response time in milliseconds
+
+        Note: Also increments http_completed and records response time.
+        """
         with self._metrics_lock:
             self._metrics.missing_data_count += 1
+            self._metrics.http_completed += 1
+            if duration_ms > 0:
+                self._metrics.http_response_times.append(duration_ms)
+
+    def record_timeout(self) -> None:
+        """Record an HTTP request timeout.
+
+        Note: Also increments http_completed so progress percentage reaches 100%.
+        """
+        with self._metrics_lock:
+            self._metrics.timeout_count += 1
+            self._metrics.http_completed += 1
 
     def record_file_skipped(self) -> None:
         """Record a file skipped due to incomplete items."""
@@ -163,6 +215,7 @@ class MetricsCollector:
                 files_written=self._metrics.files_written,
                 rows_processed=self._metrics.rows_processed,
                 missing_data_count=self._metrics.missing_data_count,
+                timeout_count=self._metrics.timeout_count,
                 files_skipped=self._metrics.files_skipped,
                 start_time=self._metrics.start_time,
                 http_response_times=list(self._metrics.http_response_times),

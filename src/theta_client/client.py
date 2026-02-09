@@ -28,7 +28,6 @@ class ThetaClient:
         storage_config: MinIOConfig,
         log_level: str = "INFO",
         show_progress: bool = True,
-        http_timeout: int = 120,
     ):
         """Initialize the ThetaClient.
 
@@ -56,7 +55,7 @@ class ThetaClient:
 
         # Initialize workers with optional metrics
         self.file_writer = FileWriter(storage_config, metrics=self._metrics)
-        self.http_worker = HTTPWorker(num_threads=num_threads, metrics=self._metrics, timeout=http_timeout)
+        self.http_worker = HTTPWorker(num_threads=num_threads, metrics=self._metrics)
         self.response_processor = ResponseProcessor(metrics=self._metrics)
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
@@ -67,7 +66,7 @@ class ThetaClient:
         log_level: str,
         log_dir: str | Path = "./logs",
         console: bool = True,
-        max_bytes: int = 100 * 1024 * 1024,  # 10MB default
+        max_bytes: int = 10 * 1024 * 1024,  # 10MB default
         backup_count: int = 5,
     ) -> None:
         """Configure logging for all theta_client modules.
@@ -92,7 +91,7 @@ class ThetaClient:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
 
-        log_file = log_path / "theta-client.log"
+        log_file = log_path / "theta-client-debug.log"
 
         # Get the theta_client root logger
         theta_logger = logging.getLogger("theta_client")
@@ -120,7 +119,7 @@ class ThetaClient:
         file_handler = RotatingFileHandler(
             log_file, maxBytes=max_bytes, backupCount=backup_count
         )
-        file_handler.setLevel(logging.WARNING)  # File always captures WARNING+
+        file_handler.setLevel(logging.DEBUG)  # File always captures DEBUG+
         file_handler.setFormatter(formatter)
         theta_logger.addHandler(file_handler)
 
@@ -188,6 +187,22 @@ class ThetaClient:
         if self._progress_display:
             self._progress_display.start()
 
+        # Start queue monitoring thread for diagnostics
+        monitoring_active = threading.Event()
+        monitoring_active.set()
+
+        def monitor_queues():
+            while monitoring_active.is_set():
+                logger.debug(
+                    f"Queue depths - HTTP: {self.http_worker.input_queue.qsize()}, "
+                    f"Processor: {self.response_processor.input_queue.qsize()}, "
+                    f"Writer: {self.file_writer.input_queue.qsize()}"
+                )
+                time.sleep(1.0)
+
+        monitor_thread = threading.Thread(target=monitor_queues, daemon=True)
+        monitor_thread.start()
+
         try:
             # Create jobs for files that need processing
             for object_key, url_list in files_to_process:
@@ -223,6 +238,10 @@ class ThetaClient:
             raise
 
         finally:
+            # Stop queue monitoring
+            monitoring_active.clear()
+            monitor_thread.join(timeout=2.0)
+
             # Stop progress display and show summary
             if self._progress_display:
                 self._progress_display.stop()
