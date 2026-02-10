@@ -36,7 +36,11 @@ class HTTPWorker(QueueWorker):
                 max_keepalive_connections=self.num_threads,
             ),
             transport=httpx.HTTPTransport(retries=0),
-            http2=True,
+            # Use HTTP/1.1 instead of HTTP/2 to ensure strict concurrency control.
+            # The server enforces a 4 concurrent request limit. HTTP/2 multiplexing
+            # allows multiple streams per connection, which could exceed this limit.
+            # HTTP/1.1 with max_connections=4 guarantees exactly 4 concurrent requests.
+            http2=False,
         )
 
     def process(self, job: Job) -> Optional[Job]:

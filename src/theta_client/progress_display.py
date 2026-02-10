@@ -108,9 +108,6 @@ class ProgressDisplay:
 
         # Issues and skipped items
         info_table.add_row(
-            "Timeouts", self._format_number(snapshot.timeout_count)
-        )
-        info_table.add_row(
             "Missing Data", self._format_number(snapshot.missing_data_count)
         )
         info_table.add_row("Files Skipped", self._format_number(snapshot.files_skipped))
@@ -122,7 +119,7 @@ class ProgressDisplay:
             TaskProgressColumn(),
             expand=False,
         )
-        task = progress.add_task(
+        _ = progress.add_task(
             "Progress",
             total=snapshot.total_http_requests,
             completed=snapshot.http_completed,
@@ -210,8 +207,6 @@ class ProgressDisplay:
                 f"p95: {snapshot.p95_response_time_ms:.0f}ms  "
                 f"p99: {snapshot.p99_response_time_ms:.0f}ms",
             )
-        if snapshot.timeout_count > 0:
-            summary_table.add_row("Timeouts", str(snapshot.timeout_count))
         if snapshot.missing_data_count > 0:
             summary_table.add_row("Missing Data", str(snapshot.missing_data_count))
         if snapshot.files_skipped > 0:
