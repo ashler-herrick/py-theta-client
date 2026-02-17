@@ -4,16 +4,14 @@ import threading
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from queue import Queue
-from typing import Generator, Optional
+from typing import Generator
 
 from theta_client.file_writer import FileWriter, MinIOConfig
 from theta_client.http_worker import HTTPWorker
 from theta_client.response_processor import ResponseProcessor
 from theta_client.dataframe_collector import DataFrameCollector, DataFrameResult, _SENTINEL
 from theta_client.requests import OptionRequest, StockRequest
-from theta_client.job import FileWriteJob, Job
-from theta_client.metrics import MetricsCollector
-from theta_client.progress_display import ProgressDisplay
+from theta_client.job import FileWriteJob, Job, PipelineCounters
 
 Request = OptionRequest | StockRequest
 
@@ -29,7 +27,6 @@ class ThetaClient:
         num_threads: int,
         storage_config: MinIOConfig,
         log_level: str = "INFO",
-        show_progress: bool = True,
     ):
         """Initialize the ThetaClient.
 
@@ -39,26 +36,16 @@ class ThetaClient:
             log_level: Log level for theta_client modules. Valid values:
                 "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
                 Default is "INFO".
-            show_progress: Whether to show live progress display. Default is True.
         """
         # Configure logging for theta_client modules
-        self._configure_logging(log_level, console=not show_progress)
+        self._configure_logging(log_level)
 
         self.num_threads = num_threads
-        self.show_progress = show_progress
 
-        # Initialize metrics collector if progress display is enabled
-        self._metrics: Optional[MetricsCollector] = (
-            MetricsCollector() if show_progress else None
-        )
-        self._progress_display: Optional[ProgressDisplay] = (
-            ProgressDisplay(self._metrics) if self._metrics else None
-        )
-
-        # Initialize workers with optional metrics
-        self.file_writer = FileWriter(storage_config, metrics=self._metrics)
-        self.http_worker = HTTPWorker(num_threads=num_threads, metrics=self._metrics)
-        self.response_processor = ResponseProcessor(metrics=self._metrics)
+        # Initialize workers
+        self.file_writer = FileWriter(storage_config)
+        self.http_worker = HTTPWorker(num_threads=num_threads)
+        self.response_processor = ResponseProcessor()
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
 
@@ -141,7 +128,7 @@ class ThetaClient:
             return
 
         self._running = True
-        logger.info(f"Starting BetEdge client with {self.num_threads} worker threads")
+        logger.debug(f"Starting BetEdge client with {self.num_threads} worker threads")
         self.http_worker.start()
         self.response_processor.start()
         self.file_writer.start()
@@ -159,7 +146,7 @@ class ThetaClient:
         key_map = request.get_key_map()
         schema = request.get_schema()
 
-        # Calculate total HTTP requests and files for metrics
+        # Calculate total HTTP requests and files
         total_http_requests = 0
         total_files = 0
         files_to_process: list[tuple[str, list[str]]] = []
@@ -173,36 +160,27 @@ class ThetaClient:
                 total_http_requests += len(url_list)
                 total_files += 1
 
-        # Initialize metrics tracking
-        if self._metrics:
-            self._metrics.start_request(
-                request_type=type(request).__name__,
-                symbol=request.symbol,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                endpoint=request.endpoint.value,
-                total_http_requests=total_http_requests,
-                total_files=total_files,
-            )
+        # Set up checkpoint logging
+        counters = PipelineCounters()
+        self.http_worker.counters = counters
+        self.file_writer.counters = counters
+        symbol = request.symbol
 
-        # Start progress display
-        if self._progress_display:
-            self._progress_display.start()
+        stop_event = threading.Event()
 
-        # Start queue monitoring thread for diagnostics
-        monitoring_active = threading.Event()
-        monitoring_active.set()
+        def log_checkpoints():
+            while not stop_event.is_set():
+                counters._notify.wait(timeout=10.0)
+                counters._notify.clear()
+                if not stop_event.is_set():
+                    elapsed = time.time() - start_time
+                    logger.info(
+                        f"[{symbol}] HTTP: {counters.http_completed}/{total_http_requests} | "
+                        f"Files: {counters.files_completed}/{total_files} | "
+                        f"Elapsed: {elapsed:.1f}s"
+                    )
 
-        def monitor_queues():
-            while monitoring_active.is_set():
-                logger.debug(
-                    f"Queue depths - HTTP: {self.http_worker.input_queue.qsize()}, "
-                    f"Processor: {self.response_processor.input_queue.qsize()}, "
-                    f"Writer: {self.file_writer.input_queue.qsize()}"
-                )
-                time.sleep(1.0)
-
-        monitor_thread = threading.Thread(target=monitor_queues, daemon=True)
+        monitor_thread = threading.Thread(target=log_checkpoints, daemon=True)
         monitor_thread.start()
 
         try:
@@ -224,15 +202,12 @@ class ThetaClient:
                     self.http_worker.add_job(job)
 
             # Wait for all jobs to flow through the pipeline and complete
-            logger.info("Waiting for all jobs to complete...")
             self.http_worker.wait_for_completion()
             self.http_worker.check_for_errors()
             self.response_processor.wait_for_completion()
             self.response_processor.check_for_errors()
             self.file_writer.wait_for_completion()
             self.file_writer.check_for_errors()
-            duration_s = time.time() - start_time
-            logger.info(f"All jobs completed successfully in {duration_s:.2f} seconds")
 
         except Exception as e:
             logger.error(f"Error during job processing: {e}")
@@ -240,15 +215,17 @@ class ThetaClient:
             raise
 
         finally:
-            # Stop queue monitoring
-            monitoring_active.clear()
+            stop_event.set()
+            counters._notify.set()
             monitor_thread.join(timeout=2.0)
-
-            # Stop progress display and show summary
-            if self._progress_display:
-                self._progress_display.stop()
-            if self._metrics:
-                self._metrics.end_request()
+            self.http_worker.counters = None
+            self.file_writer.counters = None
+            elapsed = time.time() - start_time
+            logger.info(
+                f"[{symbol}] Completed — HTTP: {counters.http_completed}/{total_http_requests} | "
+                f"Files: {counters.files_completed}/{total_files} | "
+                f"Elapsed: {elapsed:.1f}s"
+            )
 
     def stream_dataframes(
         self, request: Request
@@ -269,44 +246,52 @@ class ThetaClient:
         logger.info(
             f"Streaming {type(request).__name__} as DataFrames. Parameters: {request}"
         )
+        start_time = time.time()
 
         key_map = request.get_key_map()
         schema = request.get_schema()
 
         # Always fetch — no MinIO file_exists check for streaming
+        files_to_process: list[tuple[str, list[str]]] = []
         total_http_requests = 0
         total_files = 0
-        files_to_process: list[tuple[str, list[str]]] = []
 
         for object_key, url_list in key_map.items():
             files_to_process.append((object_key, url_list))
             total_http_requests += len(url_list)
             total_files += 1
 
-        if self._metrics:
-            self._metrics.start_request(
-                request_type=type(request).__name__,
-                symbol=request.symbol,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                endpoint=request.endpoint.value,
-                total_http_requests=total_http_requests,
-                total_files=total_files,
-            )
-
-        if self._progress_display:
-            self._progress_display.start()
+        # Set up checkpoint logging
+        counters = PipelineCounters()
+        self.http_worker.counters = counters
+        symbol = request.symbol
 
         # Set up DataFrameCollector as the terminal worker
         result_queue: Queue = Queue()
-        collector = DataFrameCollector(
-            result_queue=result_queue, metrics=self._metrics
-        )
+        collector = DataFrameCollector(result_queue=result_queue)
+        collector.counters = counters
 
         # Swap the response_processor chain from file_writer to collector
         original_chain = self.response_processor._chained_worker
         self.response_processor._chained_worker = collector
         collector.start()
+
+        stop_event = threading.Event()
+
+        def log_checkpoints():
+            while not stop_event.is_set():
+                counters._notify.wait(timeout=30.0)
+                counters._notify.clear()
+                if not stop_event.is_set():
+                    elapsed = time.time() - start_time
+                    logger.info(
+                        f"[{symbol}] HTTP: {counters.http_completed}/{total_http_requests} | "
+                        f"DataFrames: {counters.files_completed}/{total_files} | "
+                        f"Elapsed: {elapsed:.1f}s"
+                    )
+
+        monitor_thread = threading.Thread(target=log_checkpoints, daemon=True)
+        monitor_thread.start()
 
         # Submit all jobs BEFORE starting the waiter thread.
         # Otherwise wait_for_completion() sees 0 unfinished tasks and
@@ -352,10 +337,16 @@ class ThetaClient:
                 yield item
 
         finally:
+            stop_event.set()
+            counters._notify.set()
+            monitor_thread.join(timeout=2.0)
+            self.http_worker.counters = None
+            collector.counters = None
+            elapsed = time.time() - start_time
+            logger.info(
+                f"[{symbol}] Completed — HTTP: {counters.http_completed}/{total_http_requests} | "
+                f"DataFrames: {counters.files_completed}/{total_files} | "
+                f"Elapsed: {elapsed:.1f}s"
+            )
             collector.stop()
             self.response_processor._chained_worker = original_chain
-
-            if self._progress_display:
-                self._progress_display.stop()
-            if self._metrics:
-                self._metrics.end_request()

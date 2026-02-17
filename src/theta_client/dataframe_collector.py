@@ -3,16 +3,13 @@
 import logging
 from dataclasses import dataclass
 from queue import Queue
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 import polars as pl
 import pyarrow as pa
 
 from theta_client.job import Job
 from theta_client.queue_worker import QueueWorker
-
-if TYPE_CHECKING:
-    from theta_client.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +31,9 @@ class DataFrameCollector(QueueWorker):
     stream_dataframes() generator reads from.
     """
 
-    def __init__(
-        self,
-        result_queue: Queue,
-        metrics: Optional["MetricsCollector"] = None,
-    ) -> None:
+    def __init__(self, result_queue: Queue) -> None:
         super().__init__(num_threads=1)
         self._result_queue = result_queue
-        self._metrics = metrics
 
     def process(self, job: Job) -> None:
         if not job.file_write_job.completed:
@@ -53,18 +45,17 @@ class DataFrameCollector(QueueWorker):
             logger.warning(
                 f"Incomplete items for {key}. Yielding None DataFrame."
             )
-            if self._metrics:
-                self._metrics.record_file_skipped()
             self._result_queue.put(DataFrameResult(key=key, df=None))
+            if self.counters:
+                self.counters.inc_files()
             return
 
         if job.file_write_job.tables:
             table = pa.concat_tables(job.file_write_job.tables)
             df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
             self._result_queue.put(DataFrameResult(key=key, df=df))
+            if self.counters:
+                self.counters.inc_files()
             logger.debug(
                 f"Collected DataFrame for {key}: {len(df)} rows"
             )
-
-            if self._metrics:
-                self._metrics.record_file_written()

@@ -1,6 +1,6 @@
 [project]
 name = "py-theta-client"
-version = "0.2.1"
+version = "0.3.0"
 description = "Python ThetaClient"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,7 +9,6 @@ dependencies = [
     "minio>=7.2.20",
     "polars>=1.0.0",
     "pyarrow>=22.0.0",
-    "rich>=13.0.0",
 ]
 
 [dependency-groups]

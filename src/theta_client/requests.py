@@ -100,8 +100,14 @@ class ThetaRequest:
         self._validate_params()
 
     def __repr__(self):
-        params = ", ".join(f"{k}={v!r}" for k, v in vars(self).items())
-        return f"{self.__class__.__name__}({params})"
+        params = []
+        for k, v in vars(self).items():
+            if isinstance(v, Enum):
+                params.append(f"{k}={v.value!r}")
+            else:
+                params.append(f"{k}={v!r}")
+        params_str = ", ".join(params)
+        return f"{self.__class__.__name__}({params_str})"
 
     def _validate_params(self) -> None:
         pass

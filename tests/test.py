@@ -26,13 +26,12 @@ def main():
     client = ThetaClient(
         num_threads=args.threads,
         storage_config=MinIOConfig(check_buckets=["enriched-td"]),
-        show_progress=False,
-        log_level="DEBUG",
+        log_level="INFO",
     )
 
     req = OptionRequest(
         symbol="AAPL",
-        start_date=20260201,
+        start_date=20260101,
         end_date=20260216,
         data_type=DataType.HISTORY,
         endpoint=Endpoint.QUOTE,
@@ -42,9 +41,7 @@ def main():
     )
     
     for result in client.stream_dataframes(req):
-        df = result.df
-        if df is not None:
-            print(df.head())
+        pass
 
 
 if __name__ == "__main__":

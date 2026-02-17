@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from queue import Queue, Empty
 from typing import Optional
 
-from theta_client.job import Job
+from theta_client.job import Job, PipelineCounters
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ class QueueWorker(ABC):
         self.input_queue: Queue[Job] = Queue()
         self._running: bool = False
         self.num_threads: int = num_threads
+        self.counters: Optional[PipelineCounters] = None
         self._threads: list[threading.Thread] = []
         self._exception: Optional[Exception] = None
         self._exception_lock = threading.Lock()
@@ -97,7 +98,7 @@ class QueueWorker(ABC):
 
         self._running = True
         self._exception = None
-        logger.info(
+        logger.debug(
             f"Starting {self.__class__.__name__} with {self.num_threads} worker thread(s)."
         )
 
@@ -121,7 +122,7 @@ class QueueWorker(ABC):
 
     def stop(self) -> None:
         """Stop the worker threads gracefully."""
-        logger.info(f"Stopping {self.__class__.__name__}...")
+        logger.debug(f"Stopping {self.__class__.__name__}...")
         self._running = False
 
         for thread in self._threads:

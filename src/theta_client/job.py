@@ -58,3 +58,22 @@ class Job:
     schema: Schema
     csv_buffer: Optional[BytesIO]
     file_write_job: FileWriteJob
+
+
+class PipelineCounters:
+    __slots__ = ("http_completed", "files_completed", "_lock", "_notify")
+
+    def __init__(self):
+        self.http_completed = 0
+        self.files_completed = 0
+        self._lock = threading.Lock()
+        self._notify = threading.Event()
+
+    def inc_http(self):
+        with self._lock:
+            self.http_completed += 1
+
+    def inc_files(self):
+        with self._lock:
+            self.files_completed += 1
+        self._notify.set()
