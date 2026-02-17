@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "httpx[http2]>=0.28.1",
     "minio>=7.2.20",
+    "polars>=1.0.0",
     "pyarrow>=22.0.0",
     "rich>=13.0.0",
 ]

@@ -3,11 +3,13 @@ import time
 import threading
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
-from typing import Optional
+from queue import Queue
+from typing import Generator, Optional
 
 from theta_client.file_writer import FileWriter, MinIOConfig
 from theta_client.http_worker import HTTPWorker
 from theta_client.response_processor import ResponseProcessor
+from theta_client.dataframe_collector import DataFrameCollector, DataFrameResult, _SENTINEL
 from theta_client.requests import OptionRequest, StockRequest
 from theta_client.job import FileWriteJob, Job
 from theta_client.metrics import MetricsCollector
@@ -243,6 +245,116 @@ class ThetaClient:
             monitor_thread.join(timeout=2.0)
 
             # Stop progress display and show summary
+            if self._progress_display:
+                self._progress_display.stop()
+            if self._metrics:
+                self._metrics.end_request()
+
+    def stream_dataframes(
+        self, request: Request
+    ) -> Generator[DataFrameResult, None, None]:
+        """Stream data as Polars DataFrames instead of writing to MinIO.
+
+        Yields DataFrameResult objects incrementally as each logical file's
+        data completes processing. Each result corresponds to one file
+        (daily/monthly granularity matching request_data).
+
+        Args:
+            request: The data request to process
+
+        Yields:
+            DataFrameResult with key and DataFrame (or None if data was missing)
+        """
+        self._start()
+        logger.info(
+            f"Streaming {type(request).__name__} as DataFrames. Parameters: {request}"
+        )
+
+        key_map = request.get_key_map()
+        schema = request.get_schema()
+
+        # Always fetch — no MinIO file_exists check for streaming
+        total_http_requests = 0
+        total_files = 0
+        files_to_process: list[tuple[str, list[str]]] = []
+
+        for object_key, url_list in key_map.items():
+            files_to_process.append((object_key, url_list))
+            total_http_requests += len(url_list)
+            total_files += 1
+
+        if self._metrics:
+            self._metrics.start_request(
+                request_type=type(request).__name__,
+                symbol=request.symbol,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                endpoint=request.endpoint.value,
+                total_http_requests=total_http_requests,
+                total_files=total_files,
+            )
+
+        if self._progress_display:
+            self._progress_display.start()
+
+        # Set up DataFrameCollector as the terminal worker
+        result_queue: Queue = Queue()
+        collector = DataFrameCollector(
+            result_queue=result_queue, metrics=self._metrics
+        )
+
+        # Swap the response_processor chain from file_writer to collector
+        original_chain = self.response_processor._chained_worker
+        self.response_processor._chained_worker = collector
+        collector.start()
+
+        # Submit all jobs BEFORE starting the waiter thread.
+        # Otherwise wait_for_completion() sees 0 unfinished tasks and
+        # signals completion immediately.
+        for object_key, url_list in files_to_process:
+            file_write_job = FileWriteJob(
+                object_key=object_key, total_items=len(url_list)
+            )
+            for url in url_list:
+                job = Job(
+                    url=url,
+                    schema=schema,
+                    csv_buffer=None,
+                    file_write_job=file_write_job,
+                )
+                self.http_worker.add_job(job)
+
+        def _wait_and_signal():
+            """Background thread: wait for pipeline completion, then signal generator."""
+            try:
+                self.http_worker.wait_for_completion()
+                self.http_worker.check_for_errors()
+                self.response_processor.wait_for_completion()
+                self.response_processor.check_for_errors()
+                collector.wait_for_completion()
+                collector.check_for_errors()
+                result_queue.put(_SENTINEL)
+            except Exception as exc:
+                result_queue.put(exc)
+
+        waiter = threading.Thread(target=_wait_and_signal, daemon=True)
+        waiter.start()
+
+        try:
+
+            # Yield results as they arrive
+            while True:
+                item = result_queue.get()
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+
+        finally:
+            collector.stop()
+            self.response_processor._chained_worker = original_chain
+
             if self._progress_display:
                 self._progress_display.stop()
             if self._metrics:
