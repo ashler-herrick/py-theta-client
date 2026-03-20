@@ -22,7 +22,7 @@ class HTTPWorker(QueueWorker):
         """
         super().__init__(num_threads=num_threads)
         self.httpx_client = httpx.Client(
-            timeout=None,  # No timeout - let slow requests complete naturally
+            timeout=httpx.Timeout(300.0, connect=30.0),
             limits=httpx.Limits(
                 max_connections=self.num_threads,  # Must match server connection limit
                 max_keepalive_connections=self.num_threads,
@@ -72,16 +72,17 @@ class HTTPWorker(QueueWorker):
             return job
 
         except httpx.TimeoutException:
-            # Request timed out - httpx automatically cancels the request
             duration_ms = (time.time() - start_time) * 1000
             logger.warning(
-                f"Request timeout for {job.url} after {duration_ms:.1f}ms "
-                f"(limit: {self.httpx_client.timeout}s)"
+                f"Request timeout for {job.url} after {duration_ms:.1f}ms"
             )
-            job.csv_buffer = None
-            if self.counters:
-                self.counters.inc_http()
-            return job
+            raise
+        except httpx.ConnectError as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(
+                f"Connection failed for {job.url} after {duration_ms:.1f}ms: {e}"
+            )
+            raise
 
     def stop(self) -> None:
         """Stop the HTTP worker and close the HTTP client."""
