@@ -54,6 +54,9 @@ class QueueWorker(ABC):
         with self.input_queue.all_tasks_done:
             while self.input_queue.unfinished_tasks:
                 self.input_queue.all_tasks_done.wait(timeout=0.5)
+                with self._exception_lock:
+                    if self._exception is not None:
+                        return
 
     def chain_to(self, next_worker: "QueueWorker") -> "QueueWorker":
         """Chain this worker's output to another worker's input."""
