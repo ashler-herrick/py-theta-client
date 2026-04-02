@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 import csv
+import logging
 
 
 import httpx
@@ -15,6 +16,7 @@ from theta_client.job import Schema
 
 THETA_BASE_URL = "http://0.0.0.0:25503/v3"
 
+logger = logging.getLogger()
 
 class Interval(Enum):
     TICK = "tick"
@@ -154,6 +156,12 @@ class ThetaRequest:
 
         response = httpx.get(url, params=params)
         response.raise_for_status()
+
+        if response.status_code == 472:
+            response_text = response.text
+            if "No data found for your request" in response_text:
+                logger.warning(f"No data response from {url}")
+                return []
 
         reader = csv.DictReader(StringIO(response.text))
         dates = []
