@@ -155,11 +155,11 @@ class ThetaRequest:
         params = {"symbol": self.symbol}
 
         response = httpx.get(url, params=params)
-        response.raise_for_status()
 
         if response.status_code == 472:
             return []
 
+        response.raise_for_status()
         reader = csv.DictReader(StringIO(response.text))
         dates = []
         for row in reader:
