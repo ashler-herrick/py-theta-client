@@ -158,10 +158,7 @@ class ThetaRequest:
         response.raise_for_status()
 
         if response.status_code == 472:
-            response_text = response.text
-            if "No data found for your request" in response_text:
-                logger.warning(f"No data response from {url}")
-                return []
+            return []
 
         reader = csv.DictReader(StringIO(response.text))
         dates = []
