@@ -23,6 +23,10 @@ class HTTPWorker(QueueWorker):
         """
         super().__init__(num_threads=num_threads)
         self.max_retries = max_retries
+        self.httpx_client: Optional[httpx.Client] = None
+
+    def start(self) -> None:
+        """Start the HTTP worker threads and create a fresh HTTP client."""
         self.httpx_client = httpx.Client(
             timeout=httpx.Timeout(300.0, connect=30.0),
             limits=httpx.Limits(
@@ -36,6 +40,7 @@ class HTTPWorker(QueueWorker):
             # HTTP/1.1 with max_connections=4 guarantees exactly 4 concurrent requests.
             http2=False,
         )
+        super().start()
 
     def process(self, job: Job) -> Optional[Job]:
         """Fetch data from the HTTP endpoint specified in the job.
@@ -107,4 +112,6 @@ class HTTPWorker(QueueWorker):
     def stop(self) -> None:
         """Stop the HTTP worker and close the HTTP client."""
         super().stop()
-        self.httpx_client.close()
+        if self.httpx_client is not None:
+            self.httpx_client.close()
+            self.httpx_client = None

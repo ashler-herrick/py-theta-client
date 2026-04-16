@@ -37,6 +37,9 @@ class ThetaClient:
                 "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
                 Default is "INFO".
         """
+        if getattr(self, "_initialized", False):
+            return
+
         # Configure logging for theta_client modules
         self._configure_logging(log_level)
 
@@ -48,6 +51,8 @@ class ThetaClient:
         self.response_processor = ResponseProcessor()
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
+
+        self._initialized = True
 
     # Might want to break this out honestly
     def _configure_logging(
@@ -88,7 +93,9 @@ class ThetaClient:
             logging.DEBUG
         )  # Set to DEBUG to allow all messages through
 
-        # Clear existing handlers to avoid duplicates
+        # Close and clear existing handlers to avoid duplicates and FD leaks
+        for handler in theta_logger.handlers:
+            handler.close()
         theta_logger.handlers.clear()
 
         # Create formatter
@@ -211,10 +218,10 @@ class ThetaClient:
 
         except Exception as e:
             logger.error(f"Error during job processing: {e}")
-            self._stop()
             raise
 
         finally:
+            self._stop()
             stop_event.set()
             counters._notify.set()
             monitor_thread.join(timeout=2.0)
@@ -337,6 +344,7 @@ class ThetaClient:
                 yield item
 
         finally:
+            self._stop()
             stop_event.set()
             counters._notify.set()
             monitor_thread.join(timeout=2.0)
