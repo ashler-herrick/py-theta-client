@@ -150,7 +150,7 @@ class ThetaRequest:
 
         return urls
 
-    def _get_valid_dates(self) -> List[str]:
+    def get_valid_dates(self) -> List[str]:
         url = f"{THETA_BASE_URL}/stock/list/dates/quote"
         params = {"symbol": self.symbol}
 
