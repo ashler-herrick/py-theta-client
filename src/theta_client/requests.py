@@ -210,7 +210,7 @@ class ThetaRequest:
 
         base_key = f"{self.minio_folder}/{self.endpoint.value}/{self.file_granularity.value}/{int_str}/{self.symbol}"
         given_dates = self._generate_date_range()
-        valid_dates = self._get_valid_dates()
+        valid_dates = self.get_valid_dates()
         final_dates = list(set(valid_dates).intersection(set(given_dates)))
         day_map = self._map_dates_to_yearmo(final_dates)
         key_map: Dict[str, List[str]] = {}
