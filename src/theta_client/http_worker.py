@@ -14,21 +14,28 @@ logger = logging.getLogger(__name__)
 class HTTPWorker(QueueWorker):
     """Worker that fetches data from HTTP endpoints concurrently."""
 
-    def __init__(self, num_threads: int = 4, max_retries: int = 2) -> None:
+    def __init__(
+        self, num_threads: int = 4, max_retries: int = 2, timeout: float = 300.0
+    ) -> None:
         """Initialize the HTTP worker.
 
         Args:
             num_threads: Number of concurrent HTTP worker threads. Default is 4.
             max_retries: Max retries for transient errors (5xx, timeouts). Default is 2.
+            timeout: Read timeout in seconds for HTTP requests. Default is 300.0.
+                Connect timeout is fixed at 30s.
         """
+        if timeout <= 0:
+            raise ValueError(f"timeout must be > 0, got {timeout}")
         super().__init__(num_threads=num_threads)
         self.max_retries = max_retries
+        self.timeout = timeout
         self.httpx_client: Optional[httpx.Client] = None
 
     def start(self) -> None:
         """Start the HTTP worker threads and create a fresh HTTP client."""
         self.httpx_client = httpx.Client(
-            timeout=httpx.Timeout(300.0, connect=30.0),
+            timeout=httpx.Timeout(self.timeout, connect=30.0),
             limits=httpx.Limits(
                 max_connections=self.num_threads,  # Must match server connection limit
                 max_keepalive_connections=self.num_threads,

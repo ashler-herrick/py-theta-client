@@ -27,6 +27,7 @@ class ThetaClient:
         num_threads: int,
         storage_config: MinIOConfig,
         log_level: str = "INFO",
+        timeout: float = 300.0,
     ):
         """Initialize the ThetaClient.
 
@@ -36,18 +37,36 @@ class ThetaClient:
             log_level: Log level for theta_client modules. Valid values:
                 "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
                 Default is "INFO".
+            timeout: Read timeout in seconds for bulk HTTP requests. Default is 300.0.
+                Connect timeout is fixed at 30s. Because ThetaClient is a singleton,
+                this value is locked in by the first constructor call; subsequent
+                calls with a different timeout will log a warning and be ignored.
         """
+        if timeout <= 0:
+            raise ValueError(f"timeout must be > 0, got {timeout}")
+
         if getattr(self, "_initialized", False):
+            if timeout != self.timeout:
+                logger.warning(
+                    f"ThetaClient already initialized with timeout={self.timeout}; "
+                    f"ignoring requested timeout={timeout}."
+                )
+            if num_threads != self.num_threads:
+                logger.warning(
+                    f"ThetaClient already initialized with num_threads={self.num_threads}; "
+                    f"ignoring requested num_threads={num_threads}."
+                )
             return
 
         # Configure logging for theta_client modules
         self._configure_logging(log_level)
 
         self.num_threads = num_threads
+        self.timeout = timeout
 
         # Initialize workers
         self.file_writer = FileWriter(storage_config)
-        self.http_worker = HTTPWorker(num_threads=num_threads)
+        self.http_worker = HTTPWorker(num_threads=num_threads, timeout=timeout)
         self.response_processor = ResponseProcessor()
         self._running = False
         self.http_worker.chain_to(self.response_processor).chain_to(self.file_writer)
